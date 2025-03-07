@@ -1,0 +1,300 @@
+---
+title: "RegressionII_Final_ProjectCode"
+author: "Kajal Gupta"
+date: "2024-12-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Loading The Data
+```{r}
+# Load required libraries
+library(AER) # For dataset
+library(dplyr) # Data manipulation
+library(ggplot2) # Visualization
+library(corrplot) # Correlation plot
+library(MASS) # Negative binomial regression
+library(pscl) # Zero-inflated models
+library(lmtest) # Likelihood ratio tests
+
+# Load the NMES1988 dataset
+data(NMES1988, package = "AER")
+
+# Data preparation
+NMES1988 <- NMES1988 %>%
+  mutate(new.chronic = case_when(
+    chronic == 0 ~ 0,
+    chronic == 1 ~ 1,
+    chronic >= 2 ~ 2
+  ))
+```
+
+# ---------------------- Descriptive Statistics ----------------------
+```{r}
+# For continuous variables: age, income, visits
+summary(NMES1988$age) # Age
+summary(NMES1988$income) # Income
+summary(NMES1988$visits) # Dependent variable: Visits
+
+# For categorical variables: gender, insurance, health, employment, new.chronic
+table(NMES1988$gender) # Gender
+table(NMES1988$insurance) # Insurance coverage
+table(NMES1988$health) # Health status
+table(NMES1988$new.chronic) # Chronic condition categories
+```
+
+
+# ---------------------- Visualizations ----------------------
+```{r variable plots}
+# Distribution of visits (number of physician office visits)
+ggplot(NMES1988, aes(x = visits)) + 
+  geom_histogram(binwidth = 1, fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Physician Visits", x = "Number of Visits", y = "Frequency")
+```
+
+
+
+
+# ---------------------- Bivariate Analysis ----------------------
+```{r}
+# Correlation analysis
+cor_data <- NMES1988 %>% dplyr::select(visits, age, income)
+cor_matrix <- cor(cor_data, method = "spearman")
+corrplot(cor_matrix, method = "square")
+
+# Cross-tabulations
+table(NMES1988$gender, NMES1988$insurance)
+table(NMES1988$health, NMES1988$insurance)
+```
+
+
+
+
+# ---------------------- Regression Models ----------------------
+```{r}
+# 1. Poisson Model
+poisson_model <- glm(visits ~ insurance + age + income + gender + health + new.chronic, 
+                     family = "poisson", data = NMES1988)
+summary(poisson_model)
+exp(cbind(OR = coef(poisson_model), confint(poisson_model, level = 0.95)))
+
+# To check Overdispersion
+# Calculate the observed variance of the dependent variable
+observed_variance <- var(NMES1988$visits, na.rm = TRUE)
+
+# Predicted values (mean) from the Poisson model
+predicted_means <- predict(poisson_model, type = "response")
+
+# The variance predicted by the Poisson model is approximately equal to the mean
+predicted_variance <- mean(predicted_means, na.rm = TRUE)
+
+# Print the results
+print(paste("Observed Variance: ", observed_variance))
+print(paste("Predicted Variance (Poisson): ", predicted_variance))
+
+
+# 2. Negative Binomial Model
+negbinom_model <- glm.nb(visits ~ insurance + age + income + gender + health + new.chronic, 
+                          data = NMES1988)
+summary(negbinom_model)
+exp(cbind(OR = coef(negbinom_model), confint(negbinom_model)))
+
+# 3. Zero-Inflated Negative Binomial Model
+zinb_model <- zeroinfl(visits ~ insurance + age + income + gender + health + new.chronic |
+                       insurance + age + income + gender + health + new.chronic, 
+                       data = NMES1988, dist = "negbin")
+summary(zinb_model)
+exp(cbind(OR = coef(zinb_model), confint(zinb_model, level = 0.95)))
+```
+
+
+
+
+# ---------------------- Model Comparisons ----------------------
+```{r}
+model_comparison <- data.frame(
+  Model = c("Poisson", "Negative Binomial", "ZINB"),
+  AIC = c(AIC(poisson_model), AIC(negbinom_model), AIC(zinb_model)),
+  BIC = c(BIC(poisson_model), BIC(poisson_model), BIC(zinb_model))
+)
+print(model_comparison)
+```
+
+
+
+
+
+# ---------------------- Interaction Terms ----------------------
+```{r}
+# Model 1: Main Effect Model
+negbinom_model1 <- glm.nb(visits ~ insurance + age + income + gender + health + new.chronic, 
+                          data = NMES1988)
+summary(negbinom_model1)
+
+# Model 2: Interaction between insurance and gender
+Nb_model2 <- glm.nb(visits ~ insurance * gender + age + income + health + new.chronic, data = NMES1988)
+summary(Nb_model2)
+
+# Model 3: Interaction between insurance and health
+Nb_model3 <- glm.nb(visits ~ insurance * health + age + income + gender + new.chronic, 
+                    data = NMES1988)
+summary(Nb_model3)
+```
+
+
+
+
+# Likelihood Ratio Tests
+```{r}
+lrtest(negbinom_model1, Nb_model2) # Between Models 1 and 2
+lrtest(negbinom_model1, Nb_model3) # Between Models 1 and 3
+```
+
+
+
+
+# ---------------------- Model Comparisons ----------------------
+```{r}
+# Compare AIC and BIC for all three models
+# Extract AIC and BIC for Model 1, Model 2, and Model 3
+model_comparisons <- data.frame(
+  Model = c("Model 1", "Model 2", "Model 3"),
+  AIC = c(AIC(negbinom_model1), AIC(Nb_model2), AIC(Nb_model3)),
+  BIC = c(BIC(negbinom_model1), BIC(Nb_model2), BIC(Nb_model3))
+)
+
+# Print the comparison table
+print(model_comparisons)
+```
+
+
+
+
+# ---------------------- Scatterplot for Interaction Term Analysis ----------------------
+```{r}
+#Interaction Term : Insurance * Gender
+library(ggplot2)
+library(dplyr)
+
+# Check if `gender` is a factor and convert if needed
+if (!is.factor(NMES1988$gender)) {
+  NMES1988$gender <- as.factor(NMES1988$gender)
+}
+
+# Filter the data to ensure no missing values
+NMES1988 <- NMES1988 %>%
+  filter(!is.na(gender) & !is.na(visits) & !is.na(insurance))
+
+# Fit the Poisson model with interaction between gender and insurance
+gender_model <- glm(visits ~ gender * insurance, data = NMES1988, family = "poisson")
+
+# Extract the p-values for all interaction terms
+interaction_terms <- grep("gender.*:insurance", rownames(summary(gender_model)$coefficients), value = TRUE)
+p_values <- summary(gender_model)$coefficients[interaction_terms, "Pr(>|z|)"]
+
+# Print p-values for clarity
+print(p_values)
+
+# Scatter plot with regression line and dots representing gender
+ggplot(NMES1988, aes(x = insurance, y = visits, color = gender)) +
+  geom_point(alpha = 0.7, position = position_jitter(width = 0.2)) +
+  stat_summary(fun = mean, geom = "line", aes(group = gender), linewidth = 1.2) +
+  facet_wrap(~gender) +
+  labs(
+    title = "Interaction: Insurance, Visits, and Gender",
+    x = "Insurance Status",
+    y = "Number of Visits"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Check if `health` is a factor and convert if needed
+if (!is.factor(NMES1988$health)) {
+  NMES1988$health <- as.factor(NMES1988$health)
+}
+
+# Filter the data to ensure no missing values
+NMES1988 <- NMES1988 %>%
+  filter(!is.na(health) & !is.na(visits) & !is.na(insurance))
+
+# Fit the Poisson model with interaction between health and insurance
+health_model <- glm(visits ~ health * insurance, data = NMES1988, family = "poisson")
+
+# Extract the p-values for all interaction terms
+interaction_terms <- grep("health.*:insurance", rownames(summary(health_model)$coefficients), value = TRUE)
+p_values <- summary(health_model)$coefficients[interaction_terms, "Pr(>|z|)"]
+
+# Print p-values for clarity
+print(p_values)
+
+# Scatter plot with regression line and dots representing health
+ggplot(NMES1988, aes(x = insurance, y = visits, color = health)) +
+  geom_point(alpha = 0.7, position = position_jitter(width = 0.2)) +
+  stat_summary(fun = mean, geom = "line", aes(group = health), linewidth = 1.2) +
+  facet_wrap(~health) +
+  labs(
+    title = "Interaction: Insurance, Visits, and Health",
+    x = "Insurance Status",
+    y = "Number of Visits"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+
+# ---------------------- Final Model Selection ----------------------
+```{r}
+# Choose Model 3 as final model based on AIC/BIC and likelihood ratio tests
+final_model <- Nb_model3  # Model 3 with the interaction between insurance and health
+```
+
+# ---------------------- Predicted Visits ----------------------
+```{r}
+# Generate predictions based on the final model
+predictions <- NMES1988 %>%
+  mutate(pred_visits = predict(final_model, type = "response"))
+
+# Plot predicted visits by health status and insurance type
+ggplot(predictions, aes(x = health, y = pred_visits, fill = insurance)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Predicted Visits by Health and Insurance Status",
+       x = "Health Status", y = "Predicted Visits")
+```
+
+
+
+
+# ---------------------- Goodness-of-Fit ----------------------
+```{r}
+# Deviance and Pearson residuals
+gof <- residuals(final_model, type = "pearson")
+print(paste("Goodness-of-Fit (Pearson Residuals):", sum(gof^2)))
+
+# Generate Pearson residuals from the Negative Binomial model
+pearson_residuals <- residuals(final_model, type = "pearson")
+
+# Q-Q plot for Pearson residuals
+qqnorm(pearson_residuals, main = "Q-Q Plot of Pearson Residuals" , col= "skyblue")
+qqline(pearson_residuals, col = "salmon", lwd = 2)
+
+```
+
+
+
+
+
+```{r}
+
+```
+
