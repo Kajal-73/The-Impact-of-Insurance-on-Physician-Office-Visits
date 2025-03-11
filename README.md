@@ -7,7 +7,9 @@ Healthcare utilization serves as a vital indicator for assessing the accessibili
 Research consistently demonstrates the significant role of private insurance in increasing healthcare utilization by lowering out-of-pocket expenses and enhancing access to providers. For example, in 1995 Miller and Luft found that individuals with supplemental insurance were more likely to use preventive services and have routine physician visits than those without.¹ Similarly, in 2021 the National Healthcare Quality and Disparities Report emphasized income and insurance coverage as critical factors influencing healthcare access and utilization among older adults.² Although the NMES1988 data predates these studies, the relationships between insurance, income, and healthcare utilization remain relevant. These factors have consistently shaped healthcare behavior over time, aligning with long-standing health economic principles, such as the influence of financial barriers on access to care. 
 ### Research Questions
 Model 1: Does having private insurance significantly influence the number of physician office visits among Medicare beneficiaries aged 66 and over?
+
 Model 2: Does the effect of private insurance on the number of physician office visits differ by gender?
+
 Model 3: Does the effect of private insurance on the number of physician office visits vary by health level?
 
 ---
